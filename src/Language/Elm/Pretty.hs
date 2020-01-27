@@ -151,7 +151,12 @@ extendPat env pat =
 
     occurrences =
       HashSet.toList occurrencesSet
+  in
+  extendMany env occurrences
 
+extendMany :: Environment v -> [Int] -> Environment (Bound.Var Int v)
+extendMany env occurrences =
+  let
     bindings =
       HashMap.fromList $
         zip occurrences $ freshLocals env
@@ -378,16 +383,30 @@ definition env def =
           pretty name <+> hsep (local <$> names) <+> "=") <>
       line <> indent 4 body
 
-    Definition.Type (Name.Qualified _ name) constrs ->
-      "type" <+> pretty name <> line <>
+    Definition.Type (Name.Qualified _ name) numParams constrs ->
+      let
+        params =
+          [0..numParams - 1]
+
+        env' =
+          extendMany env params
+      in
+      "type" <+> pretty name <+> hsep (local . locals env' . Bound.B <$> params) <> line <>
         indent 4 ("=" <+>
           mconcat
             (intersperse (line <> "| ")
-              [constructor c <+> hsep (type_ env (appPrec + 1) <$> ts) | (c, ts) <- constrs]))
+              [constructor c <+> hsep (type_ env' (appPrec + 1) . Bound.fromScope <$> ts) | (c, ts) <- constrs]))
 
-    Definition.Alias (Name.Qualified _ name) t ->
-      "type alias" <+> pretty name <+> "=" <> line <>
-      indent 4 (type_ env 0 t)
+    Definition.Alias (Name.Qualified _ name) numParams t ->
+      let
+        params =
+          [0..numParams - 1]
+
+        env' =
+          extendMany env params
+      in
+      "type alias" <+> pretty name <+> hsep (local . locals env' . Bound.B <$> params) <+> "=" <> line <>
+      indent 4 (type_ env' 0 $ Bound.fromScope t)
 
 -------------------------------------------------------------------------------
 -- * Expressions
